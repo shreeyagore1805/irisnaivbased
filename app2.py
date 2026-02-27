@@ -1,138 +1,100 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import (
-    ConfusionMatrixDisplay,
-    mean_squared_error,
-    r2_score,
-    accuracy_score
-)
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="ML App with EDA", layout="centered")
-st.title("Machine Learning App (Classification & Regression)")
+st.title("Naive Bayes Classifier with Descriptive Analysis & Visualization")
 
-# ---------------- FILE UPLOAD ----------------
-file = st.file_uploader("Upload CSV File", type=["csv"])
+uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
-if file is None:
-    st.info("Upload a CSV file to continue.")
-    st.stop()
+if uploaded_file is not None:
 
-df = pd.read_csv(file)
+    data = pd.read_csv(uploaded_file)
 
-# ---------------- DATA PREVIEW ----------------
-st.subheader("Dataset Preview")
-st.dataframe(df.head())
+    st.header("Descriptive Analysis")
 
-# ================= EDA =================
-st.header("Exploratory Data Analysis")
+    st.subheader("Dataset Shape")
+    st.write("Rows:", data.shape[0], "Columns:", data.shape[1])
 
-numeric_cols = df.select_dtypes(include="number")
+    st.subheader("Dataset Preview")
+    st.dataframe(data.head())
 
-if not numeric_cols.empty:
     st.subheader("Summary Statistics")
-    st.dataframe(numeric_cols.describe())
+    st.write(data.describe())
 
-    col = st.selectbox("Select Numeric Column", numeric_cols.columns)
+    # ----------- VISUALIZATION SECTION ----------- #
+    st.header("Data Visualization")
+
+    numeric_cols = data.select_dtypes(include=np.number).columns
 
     # Histogram
-    st.markdown("**Histogram**")
-    fig, ax = plt.subplots()
-    ax.hist(df[col], bins=20)
-    st.pyplot(fig)
+    st.subheader("Histogram")
+    hist_col = st.selectbox("Select Column for Histogram", numeric_cols)
+    fig1, ax1 = plt.subplots()
+    sns.histplot(data[hist_col], kde=True, ax=ax1)
+    st.pyplot(fig1)
 
     # Boxplot
-    st.markdown("**Box Plot**")
-    fig, ax = plt.subplots()
-    ax.boxplot(df[col], vert=False)
-    st.pyplot(fig)
+    st.subheader("Boxplot")
+    box_col = st.selectbox("Select Column for Boxplot", numeric_cols)
+    fig2, ax2 = plt.subplots()
+    sns.boxplot(y=data[box_col], ax=ax2)
+    st.pyplot(fig2)
 
     # Correlation Heatmap
-    if len(numeric_cols.columns) > 1:
-        st.markdown("**Correlation Heatmap**")
-        fig, ax = plt.subplots()
-        sns.heatmap(numeric_cols.corr(), annot=True, cmap="coolwarm", ax=ax)
-        st.pyplot(fig)
+    st.subheader("Correlation Heatmap")
+    fig3, ax3 = plt.subplots()
+    sns.heatmap(data.corr(numeric_only=True), annot=True, cmap="coolwarm", ax=ax3)
+    st.pyplot(fig3)
 
-# ================= MODEL SECTION =================
-st.header("Model Training")
+    # Target Distribution
+    st.subheader("Target Distribution")
+    target_col = st.selectbox("Select Target for Distribution", data.columns)
+    fig4, ax4 = plt.subplots()
+    sns.countplot(x=data[target_col], ax=ax4)
+    plt.xticks(rotation=45)
+    st.pyplot(fig4)
 
-model_type = st.radio("Choose Model Type", ["Classification", "Regression"])
+    # ----------- MODEL SECTION ----------- #
+    st.header("Model Training")
 
-target_col = st.selectbox("Select Target Column", df.columns)
+    target = st.selectbox("Select Target Column for Model", data.columns)
 
-feature_cols = st.multiselect(
-    "Select Feature Columns",
-    [col for col in df.columns if col != target_col and df[col].dtype != "object"]
-)
-
-train_percent = st.slider("Training Data Percentage", 60, 90, 70)
-
-if model_type == "Classification":
-    classifier_name = st.selectbox(
-        "Choose Classifier",
-        ["Naive Bayes", "Logistic Regression", "KNN", "Decision Tree"]
+    features = st.multiselect(
+        "Select Feature Columns",
+        [col for col in data.columns if col != target]
     )
 
-# ================= TRAIN MODEL =================
-if st.button("Train Model"):
+    test_size = st.slider("Select Test Size (%)", 10, 50, 30) / 100
 
-    if len(feature_cols) == 0:
-        st.warning("Select at least one feature column.")
-        st.stop()
+    if st.button("Train Model"):
 
-    X = df[feature_cols]
-    y = df[target_col]
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=(100 - train_percent) / 100, random_state=42
-    )
-
-    # ---------- Classification ----------
-    if model_type == "Classification":
-
-        y_train = y_train.astype(str)
-        y_test = y_test.astype(str)
-
-        if classifier_name == "Naive Bayes":
-            model = GaussianNB()
-        elif classifier_name == "Logistic Regression":
-            model = LogisticRegression(max_iter=1000)
-        elif classifier_name == "KNN":
-            model = KNeighborsClassifier()
+        if len(features) == 0:
+            st.warning("Please select at least one feature.")
         else:
-            model = DecisionTreeClassifier(random_state=42)
+            X = data[features]
+            y = data[target]
 
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42
+            )
 
-        st.subheader("Accuracy")
-        st.write("Accuracy:", round(accuracy_score(y_test, y_pred), 4))
+            model = GaussianNB()
+            model.fit(X_train, y_train)
 
-        st.subheader("Confusion Matrix")
-        fig, ax = plt.subplots()
-        ConfusionMatrixDisplay.from_predictions(y_test, y_pred, ax=ax)
-        st.pyplot(fig)
+            y_pred = model.predict(X_test)
 
-    # ---------- Regression ----------
-    else:
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+            acc = accuracy_score(y_test, y_pred)
+            cm = confusion_matrix(y_test, y_pred)
 
-        mse = mean_squared_error(y_test, y_pred)
+            st.success(f"Model Accuracy: {round(acc * 100, 2)}%")
 
-        st.subheader("Regression Metrics")
-        st.write("MSE:", round(mse, 4))
-        st.write("RMSE:", round(mse ** 0.5, 4))
-        st.write("R²:", round(r2_score(y_test, y_pred), 4))
+            st.subheader("Confusion Matrix")
+            st.write(cm)
 
-    st.success("Model trained successfully.")
+            st.subheader("Classification Report")
+            st.text(classification_report(y_test, y_pred))
